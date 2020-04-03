@@ -1,0 +1,86 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    name: Build
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - name: Build
+      run: echo Building.... && sleep 10
+
+  rollbar_pre_deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    name: Notify Rollbar about start deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Nofity rollbar
+        uses: ./.github/actions/rollbar-deploy/
+        id: rollbar_pre_deploy
+        with:
+          environment: 'production'
+          version: '0.0.1'
+          status: 'started'
+        env:
+          ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
+
+      # Print Rollbar's deploy id
+      - name: Get the Rollbar deploy id
+        run: echo Deploy created with id ${{ steps.rollbar_pre_deploy.outputs.deploy_id }}
+
+  # This workflow contains a single job called "build"
+  deploy:
+    needs: rollbar_pre_deploy
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+    name: Deploy
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - name: Deploy
+      run: echo Deploying.... && sleep 10
+
+    # Print Rollbar's deploy id
+    - name: Get the Rollbar deploy id
+      run: echo Deploy created with id ${{ steps.rollbar_deploy.outputs.deploy_id }}
+
+  rollbar_post_deploy:
+    needs: deploy
+    runs-on: ubuntu-latest
+    name: Notify Rollbar about finish deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Nofity rollbar
+        uses: ./.github/actions/rollbar-deploy/
+        id: rollbar_post_deploy
+        with:
+          environment: 'production'
+          version: '0.0.1'
+          status: 'succeeded'
+        env:
+          ROLLBAR_ACCESS_TOKEN: ${{ secrets.ROLLBAR_ACCESS_TOKEN }}
+          DEPLOY_ID: ${{ steps.rollbar_pre_deploy.outputs.deploy_id }}
+
+      # Print Rollbar's deploy id
+      - name: Updated the Rollbar deploy with id
+        run: echo Deploy created with id ${{ steps.rollbar_post_deploy.outputs.deploy_id }}
